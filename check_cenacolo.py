@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date
@@ -74,11 +75,40 @@ EXTRACT_JS = """
 # Telegram
 # --------------------------------------------------------------------------
 
-def telegram(texto: str) -> None:
-    if not TG_TOKEN or not TG_CHAT:
-        print("[aviso] Sin credenciales de Telegram; el mensaje solo va al log.")
+def diagnostico_credenciales() -> bool:
+    """Comprueba los secretos sin imprimir su contenido."""
+    ok = True
+
+    if not TG_TOKEN:
+        print("[X] Falta el secret TELEGRAM_BOT_TOKEN (o esta vacio).")
+        ok = False
+    elif ":" not in TG_TOKEN or not TG_TOKEN.split(":")[0].isdigit():
+        print(f"[X] TELEGRAM_BOT_TOKEN no tiene forma de token "
+              f"({len(TG_TOKEN)} caracteres). Debe ser '123456789:AAH...'.")
+        ok = False
+    else:
+        print(f"[v] TELEGRAM_BOT_TOKEN presente ({len(TG_TOKEN)} caracteres).")
+
+    if not TG_CHAT:
+        print("[X] Falta el secret TELEGRAM_CHAT_ID (o esta vacio).")
+        ok = False
+    elif not TG_CHAT.lstrip("-").isdigit():
+        print(f"[X] TELEGRAM_CHAT_ID deberia ser solo numeros, y es "
+              f"'{TG_CHAT[:4]}...'. Si empieza por @ o tiene espacios, corrigelo.")
+        ok = False
+    else:
+        print(f"[v] TELEGRAM_CHAT_ID presente ({len(TG_CHAT)} digitos).")
+
+    return ok
+
+
+def telegram(texto: str) -> bool:
+    """Envia el mensaje. Devuelve True si Telegram lo acepto."""
+    if not diagnostico_credenciales():
+        print("--- El mensaje que se habria enviado ---")
         print(texto)
-        return
+        return False
+
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
     datos = urllib.parse.urlencode({
         "chat_id": TG_CHAT,
@@ -86,12 +116,46 @@ def telegram(texto: str) -> None:
         "parse_mode": "HTML",
         "disable_web_page_preview": "false",
     }).encode()
+
     try:
         with urllib.request.urlopen(url, data=datos, timeout=30) as r:
             r.read()
-        print("[ok] Aviso enviado por Telegram.")
+        print("[ok] Telegram acepto el mensaje. Deberia estar en tu movil.")
+        return True
+
+    except urllib.error.HTTPError as e:
+        # Telegram explica el motivo exacto en el cuerpo de la respuesta.
+        try:
+            cuerpo = json.loads(e.read().decode())
+            motivo = cuerpo.get("description", "")
+        except Exception:  # noqa: BLE001
+            motivo = ""
+        print(f"[X] Telegram rechazo el mensaje: HTTP {e.code} {motivo}",
+              file=sys.stderr)
+
+        pistas = {
+            "chat not found":
+                "El TELEGRAM_CHAT_ID no es correcto. Pide tu Id a @userinfobot.",
+            "bot was blocked":
+                "Has bloqueado a tu propio bot. Desbloquealo en Telegram.",
+            "can't initiate conversation":
+                "Abre el chat con TU bot en Telegram y pulsa Start (/start).",
+            "unauthorized":
+                "El TELEGRAM_BOT_TOKEN es incorrecto. Pideselo otra vez a @BotFather.",
+        }
+        for clave, pista in pistas.items():
+            if clave in motivo.lower():
+                print(f"    -> {pista}", file=sys.stderr)
+                break
+        else:
+            print("    -> Revisa los dos secrets en Settings > Secrets and "
+                  "variables > Actions.", file=sys.stderr)
+        return False
+
     except Exception as e:  # noqa: BLE001
-        print(f"[error] No se pudo enviar el Telegram: {e}", file=sys.stderr)
+        print(f"[X] No se pudo contactar con Telegram: {type(e).__name__}: {e}",
+              file=sys.stderr)
+        return False
 
 
 # --------------------------------------------------------------------------
@@ -189,6 +253,17 @@ def guardar_estado(f: str) -> None:
 # --------------------------------------------------------------------------
 
 def main() -> int:
+    # Modo prueba: solo comprueba que Telegram te llega. No mira entradas.
+    if os.environ.get("MODO_PRUEBA", "").lower() in ("true", "1", "yes"):
+        print("Modo prueba: enviando un Telegram de comprobacion.")
+        enviado = telegram(
+            "✅ <b>Prueba del vigilante del Cenacolo</b>\n\n"
+            "Si lees esto, el bot puede avisarte. Ya esta vigilando "
+            "el 14-18 de octubre de 2026."
+        )
+        # Si el envio falla, el run sale en ROJO para que se note.
+        return 0 if enviado else 1
+
     hallazgos, errores = buscar_huecos()
 
     for e in errores:
