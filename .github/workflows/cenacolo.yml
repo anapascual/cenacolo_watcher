@@ -1,0 +1,50 @@
+name: Vigilante Cenacolo
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+    - cron: "50,55 9 * * 3"
+    - cron: "0,5,10,20 10 * * 3"
+  workflow_dispatch:
+    inputs:
+      prueba:
+        description: "Enviar un Telegram de prueba (no comprueba entradas)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: cenacolo
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restaurar estado
+        uses: actions/cache@v4
+        with:
+          path: state.json
+          key: cenacolo-state-${{ github.run_id }}
+          restore-keys: |
+            cenacolo-state-
+
+      - name: Instalar Playwright
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Comprobar disponibilidad
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MODO_PRUEBA: ${{ inputs.prueba }}
+        run: python check_cenacolo.py
