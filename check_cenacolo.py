@@ -93,8 +93,8 @@ def diagnostico_credenciales() -> bool:
         print("[X] Falta el secret TELEGRAM_CHAT_ID (o esta vacio).")
         ok = False
     elif not TG_CHAT.lstrip("-").isdigit():
-        print(f"[X] TELEGRAM_CHAT_ID deberia ser solo numeros, y es "
-              f"'{TG_CHAT[:4]}...'. Si empieza por @ o tiene espacios, corrigelo.")
+        print("[X] TELEGRAM_CHAT_ID no es un numero. Si empieza por @ o "
+              "tiene espacios, corrigelo. Pide tu Id a @userinfobot.")
         ok = False
     else:
         print(f"[v] TELEGRAM_CHAT_ID presente ({len(TG_CHAT)} digitos).")
