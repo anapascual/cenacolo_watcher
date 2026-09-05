@@ -2,9 +2,12 @@ name: Vigilante Cenacolo
 
 on:
   schedule:
+    # Todas las horas en punto (UTC). Cobertura base de cancelaciones.
     - cron: "0 * * * *"
-    - cron: "50,55 9 * * 3"
-    - cron: "0,5,10,20 10 * * 3"
+    # Refuerzo del miercoles: liberacion semanal a las 12:00 hora de Italia.
+    # Octubre 2026 va en CEST (UTC+2), asi que 12:00 Madrid = 10:00 UTC.
+    - cron: "37 * * * *"
+    - cron: "3,8,13,23 10 * * 3"
   workflow_dispatch:
     inputs:
       prueba:
@@ -12,6 +15,7 @@ on:
         type: boolean
         default: false
 
+# Si un run se solapa con el anterior, cancela el viejo.
 concurrency:
   group: cenacolo
   cancel-in-progress: true
@@ -22,14 +26,15 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
+      # Recuerda entre ejecuciones de que ya te avise, para no repetir.
       - name: Restaurar estado
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: state.json
           key: cenacolo-state-${{ github.run_id }}
